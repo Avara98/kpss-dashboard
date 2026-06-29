@@ -379,6 +379,19 @@ app.get('/api/server/info', (_req, res) => {
   });
 });
 
+app.get('/api/health', async (_req, res) => {
+  const checks = { server: 'OK', database: 'FAIL', dbUrl: '???', error: null };
+  try {
+    checks.dbUrl = process.env.DATABASE_URL ? 'SET (' + process.env.DATABASE_URL.substring(0, 30) + '...)' : 'NOT SET!';
+    const { rows } = await db.pool.query('SELECT COUNT(*) as c FROM users');
+    checks.database = 'OK';
+    checks.userCount = rows[0].c;
+  } catch (e) {
+    checks.error = e.message;
+  }
+  res.json(checks);
+});
+
 app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });

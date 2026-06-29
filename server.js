@@ -16,13 +16,18 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
+app.set('trust proxy', 1);
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RENDER;
 
 app.use(session({
   store: new pgSession({
     pool: db.pool,
-    tableName: 'session'
+    tableName: 'session',
+    createTableIfMissing: true
   }),
   secret: process.env.SESSION_SECRET || 'kpss-dashboard-local-secret-change-in-production',
   resave: false,
@@ -31,6 +36,7 @@ app.use(session({
     maxAge: 30 * 24 * 60 * 60 * 1000,
     httpOnly: true,
     sameSite: 'lax',
+    secure: isProduction,
   },
 }));
 

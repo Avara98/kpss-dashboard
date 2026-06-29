@@ -1,0 +1,7 @@
+node_modules/
+# kpss.db should probably NOT be ignored if they want to upload their local db for the FIRST time,
+# but usually it's best practice to ignore DB and .env. 
+# Let's just ignore node_modules and .env for now.
+.env
+.DS_Store
+data/sessions.db*

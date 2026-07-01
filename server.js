@@ -7,13 +7,16 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const db = require('./db');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+// Initialize Supabase Storage Client
+let supabase = null;
+if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
+  supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+  console.log('  ☁️  Supabase Storage: Aktif');
 }
 
 app.set('trust proxy', 1);
@@ -267,17 +270,51 @@ app.post('/api/notes', requireAuth, async (req, res) => {
   
   let imageUrl = null;
   if (image) {
-    try {
-      const matches = image.match(/^data:image\/([A-Za-z-+\/]+);base64,(.+)$/);
-      if (matches && matches.length === 3) {
-        const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
-        const buffer = Buffer.from(matches[2], 'base64');
-        const filename = `note_${req.session.userId}_${Date.now()}.${ext}`;
-        fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer);
-        imageUrl = `/uploads/${filename}`;
+    if (supabase) {
+      // Upload to Supabase Storage (kalıcı, Render restart'a dayanıklı)
+      try {
+        const matches = image.match(/^data:image\/([A-Za-z-+\/]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+          const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+          const buffer = Buffer.from(matches[2], 'base64');
+          const filename = `note_${req.session.userId}_${Date.now()}.${ext}`;
+          
+          const { data, error } = await supabase.storage
+            .from('notes')
+            .upload(filename, buffer, {
+              contentType: `image/${matches[1]}`,
+              cacheControl: '3600',
+              upsert: false
+            });
+            
+          if (error) {
+            console.error('Supabase Storage upload error:', error.message);
+          } else {
+            const { data: publicUrlData } = supabase.storage
+              .from('notes')
+              .getPublicUrl(filename);
+            imageUrl = publicUrlData.publicUrl;
+          }
+        }
+      } catch (e) {
+        console.error('Image upload error:', e);
       }
-    } catch (e) {
-      console.error('Image upload error:', e);
+    } else {
+      // Fallback: save to local disk (only for local dev)
+      try {
+        const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
+        if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+        const matches = image.match(/^data:image\/([A-Za-z-+\/]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+          const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+          const buffer = Buffer.from(matches[2], 'base64');
+          const filename = `note_${req.session.userId}_${Date.now()}.${ext}`;
+          fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer);
+          imageUrl = `/uploads/${filename}`;
+        }
+      } catch (e) {
+        console.error('Image upload error:', e);
+      }
     }
   }
 

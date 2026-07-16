@@ -1535,3 +1535,12 @@ async function init() {
 }
 
 init();
+
+// PWA Service Worker Registration
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(err => {
+      console.log('PWA ServiceWorker registration failed: ', err);
+    });
+  });
+}
